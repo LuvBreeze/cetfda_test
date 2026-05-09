@@ -51,6 +51,6 @@ for i in range(4):
 plt.legend()
 plt.title('t-SNE Visualization')
 
-plt.savefig('../figures/tsne.png', dpi=300)
+plt.savefig('./tsne.png', dpi=300)
 
 plt.show()

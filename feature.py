@@ -1,4 +1,4 @@
-# feature.py(特征提取)
+# feature.py
 import numpy as np
 
 

@@ -1,4 +1,4 @@
-# models.py(ELM模型)
+# models.py
 import numpy as np
 
 

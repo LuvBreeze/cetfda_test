@@ -1,4 +1,4 @@
-# updater.py（云端模型更新）
+# updater.py
 
 import os
 import time
