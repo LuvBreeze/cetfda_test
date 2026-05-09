@@ -1,4 +1,4 @@
-# data_loader.py(数据加载)
+# data_loader.py
 import numpy as np
 import scipy.io as sio
 import os

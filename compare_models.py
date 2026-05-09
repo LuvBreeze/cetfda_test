@@ -1,4 +1,4 @@
-# compare_models.py(模型对比)
+# compare_models.py
 import time
 
 from sklearn.model_selection import train_test_split

@@ -1,3 +1,4 @@
+# run.py
 import threading
 import time
 import os
@@ -9,10 +10,10 @@ from gui import root, start_detection, stop_detection  # 直接使用 gui.py 的
 # =========================
 # 云端训练线程
 # =========================
-def cloud_training_loop(data_path='E:/VScode/Python/毕设/数据集/CRWU', model_path='E:/VScode/Python/毕设/project/models/model.npy'):
+def cloud_training_loop(data_path='./CRWU', model_path='./models/model.npy'):
     while True:
         # 检查是否有新数据
-        upload_file = 'E:/VScode/Python/毕设/project/uploaded_data/new_data.npy'
+        upload_file = './uploaded_data/new_data.npy'
         if os.path.exists(upload_file):
             print("[云端] 发现新数据，开始训练...")
             new_data = np.load(upload_file)
