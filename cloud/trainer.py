@@ -23,7 +23,7 @@ matplotlib.rcParams['axes.unicode_minus'] = False
 def train_model(data_path=DATA_PATH,
                 extra_data=None,
                 save_path=MODEL_PATH,
-                n_hidden=800,
+                n_hidden=1200,
                 visualize=True):
 
     models_dir = os.path.dirname(save_path)
@@ -48,7 +48,7 @@ def train_model(data_path=DATA_PATH,
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
-    # 少数类过采样（可选，但可调节）
+    # 少数类过采样
     max_count = max(np.bincount(y))
     X_aug, y_aug = [], []
     for cls in classes:
@@ -104,5 +104,3 @@ def train_model(data_path=DATA_PATH,
     return elm, scaler
 
 
-if __name__ == "__main__":
-    train_model()
