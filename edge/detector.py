@@ -2,11 +2,19 @@
 
 import os
 import numpy as np
+import time
+
 from model import OptimizedELM
 from feature import extract_features
+from cloud.trainer import train_model
 
-MODEL_PATH = r"E:/VScode/Python/毕设/project/models/model.npy"
-VERSION_PATH = r"E:/VScode/Python/毕设/project/models/version.txt"
+# -------------------
+# 动态计算数据和模型路径
+# -------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # detector.py 所在目录
+MODEL_PATH = os.path.join(BASE_DIR, '../models/model.npy')
+VERSION_PATH = os.path.join(BASE_DIR, '../models/version.txt')
+DATA_PATH = os.path.join(BASE_DIR, '../CRWU')
 
 # -------------------
 # 初始化模型
@@ -15,21 +23,33 @@ models_dir = os.path.dirname(MODEL_PATH)
 if not os.path.exists(models_dir):
     os.makedirs(models_dir)
 
+elm = OptimizedELM()
+
+# 尝试训练初始模型，如果数据为空或训练失败，退回随机模型
 if not os.path.exists(MODEL_PATH):
-    print("[警告] 模型不存在，正在生成初始模型...")
-    feature_len = 15
-    n_classes = 4
-    elm = OptimizedELM()
-    elm.W = np.random.randn(feature_len, 500)*0.1
-    elm.b = np.random.randn(500)*0.1
-    elm.beta = np.random.randn(500, n_classes)*0.1
-    mean = np.zeros(feature_len)
-    scale = np.ones(feature_len)
-    np.save(MODEL_PATH, {'W': elm.W, 'b': elm.b, 'beta': elm.beta,
-                         'mean': mean, 'scale': scale})
+    print("[警告] 模型不存在，正在训练初始模型...", flush=True)
+    try:
+        # 检查数据路径存在且有文件
+        if os.path.exists(DATA_PATH) and any(os.scandir(DATA_PATH)):
+            elm, scaler = train_model(data_path=DATA_PATH, save_path=MODEL_PATH)
+            mean = scaler.mean_
+            scale = scaler.scale_
+            print("[提示] 初始模型训练完成", flush=True)
+        else:
+            raise ValueError("训练数据为空或路径不存在")
+    except Exception as e:
+        print(f"[警告] 训练模型失败: {e}", flush=True)
+        print("[提示] 使用随机初始模型代替", flush=True)
+        feature_len = 15
+        n_classes = 10
+        elm.W = np.random.randn(feature_len, 500)*0.1
+        elm.b = np.random.randn(500)*0.1
+        elm.beta = np.random.randn(500, n_classes)*0.1
+        mean = np.zeros(feature_len)
+        scale = np.ones(feature_len)
+        np.save(MODEL_PATH, {'W': elm.W, 'b': elm.b, 'beta': elm.beta, 'mean': mean, 'scale': scale})
 else:
     params = np.load(MODEL_PATH, allow_pickle=True).item()
-    elm = OptimizedELM()
     elm.W = params['W']
     elm.b = params['b']
     elm.beta = params['beta']
@@ -37,7 +57,7 @@ else:
     scale = params['scale']
 
 # -------------------
-# 模型版本
+# 模型版本及热更新
 # -------------------
 def get_model_version():
     if not os.path.exists(VERSION_PATH):
@@ -76,31 +96,42 @@ def stable_sigmoid(x):
 # 预测
 # -------------------
 def predict_signal(sig, debug=False):
+    debug_info = None
     feat = extract_features(sig)
-    # 处理极大值特征
     large_idx = [8, 13, 14]
     for i in large_idx:
         feat[i] = np.log1p(abs(feat[i]))*np.sign(feat[i])
-    # 标准化
     feat_norm = (feat - mean)/scale
     feat_norm = np.clip(feat_norm, -10, 10)
-    # ELM 输出
     out = stable_sigmoid(feat_norm.reshape(1,-1) @ elm.W + elm.b) @ elm.beta
     pred_class = np.argmax(out)
-    label_map = {0:"Normal",1:"Ball Fault",2:"Inner Race Fault",3:"Outer Race Fault"}
-    result = label_map[pred_class]
+    label_map = {
+        0: "Normal",
+        1: "12k Drive Ball",
+        2: "12k Drive Inner Race",
+        3: "12k Drive Outer Race",
+        4: "12k Fan Ball",
+        5: "12k Fan Inner Race",
+        6: "12k Fan Outer Race",
+        7: "48k Drive Ball",
+        8: "48k Drive Inner Race",
+        9: "48k Drive Outer Race"
+    }
+    result = label_map.get(pred_class, f"Unknown({pred_class})")
 
     if debug:
-        print("---- 调试信息 ----")
-        print("信号前10个样本:", sig[:10])
-        print("特征向量:", np.round(feat,3))
-        print("标准化后特征:", np.round(feat_norm,3))
-        print("ELM 输出:", np.round(out,3))
-        print("ELM 输出每列:", out.flatten())
-        print("预测类别:", result)
-        print("-----------------")
-
-    return result
+        debug_info = \
+f"""---- 调试信息 ----
+时间: {time.strftime('%H:%M:%S')}
+信号前10个样本: {sig[:10]}
+特征向量: {np.round(feat, 3)}
+标准化后特征: {np.round(feat_norm, 3)}
+ELM 输出: {np.round(out, 3)}
+ELM 输出每列: {out.flatten()}
+预测类别: {result}
+预测置信度: {np.max(out):.3f}
+-----------------"""
+    return result, debug_info
 
 # -------------------
 # 多客户端多信号采集
@@ -111,10 +142,8 @@ def collect_signals(n_clients=3, n_signals=2, debug=False, scada_mode=False):
         client_signals = []
         for _ in range(n_signals):
             if scada_mode:
-                # 这里需要实现 SCADA 实时采集接口
-                sig = np.random.randn(2048)  # 占位
+                sig = np.random.randn(2048)
             else:
-                # 模拟不同客户端不同模式
                 if client_id==0:
                     sig = np.random.randn(2048)
                 elif client_id==1:
