@@ -6,6 +6,7 @@ import random
 import numpy as np
 import time
 import scipy.io
+import threading
 
 from model import OptimizedELM
 from feature import extract_features
@@ -18,6 +19,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, '../models/model.npy')
 VERSION_PATH = os.path.join(BASE_DIR, '../models/version.txt')
 DATA_PATH = os.path.join(BASE_DIR, '../CRWU')
+
 
 # -------------------
 # 初始化模型
@@ -68,80 +70,84 @@ def get_model_version():
 
 current_version = get_model_version()
 
-def reload_model():
-    global elm, mean, scale
-    params = np.load(MODEL_PATH, allow_pickle=True).item()
-    elm.W = params['W']
-    elm.b = params['b']
-    elm.beta = params['beta']
-    mean = params['mean']
-    scale = params['scale']
-    print("[detector] 模型热更新完成")
+_version_lock = threading.Lock()
 
 def check_model_update():
     global current_version
     latest_version = get_model_version()
-    if latest_version != current_version:
-        current_version = latest_version
-        reload_model()
-        return True
+    with _version_lock:
+        if latest_version != current_version:
+            current_version = latest_version
+            reload_model()
+            return True
     return False
+
+def reload_model():
+    global elm, mean, scale
+    with _version_lock:
+        params = np.load(MODEL_PATH, allow_pickle=True).item()
+        elm.W = params['W']
+        elm.b = params['b']
+        elm.beta = params['beta']
+        mean = params['mean']
+        scale = params['scale']
+        print("[detector] 模型热更新完成")
 
 # -------------------
 # 预测
 # -------------------
 def predict_signal(sig, debug=False, simulation_mode=False):
-    debug_info = None
     feat = extract_features(sig)
     large_idx = [8, 13, 14]
 
-    if simulation_mode:
-        result = np.random.choice(["Normal",
-                    "12k Drive Ball",
-                    "12k Drive Inner Race",
-                    "12k Drive Outer Race",
-                    "12k Fan Ball",
-                    "12k Fan Inner Race",
-                    "12k Fan Outer Race",
-                    "48k Drive Ball",
-                    "48k Drive Inner Race",
-                    "48k Drive Outer Race"])
-        debug_info = f"模拟故障信号类别: {result}" if debug else None
-        return result, debug_info
-
+    # 数据预处理
     for i in large_idx:
         feat[i] = np.log1p(abs(feat[i])) * np.sign(feat[i])
 
     feat_norm = (feat - mean) / scale
     feat_norm = np.clip(feat_norm, -10, 10)
 
-    out = OptimizedELM._sigmoid(feat_norm.reshape(1, -1) @ elm.W + elm.b) @ elm.beta
-    pred_class = np.argmax(out)
+    if simulation_mode:
+        # 模拟模式只生成随机结果
+        result = np.random.choice([
+            "Normal", "12k Drive Ball", "12k Drive Inner Race", "12k Drive Outer Race",
+            "12k Fan Ball", "12k Fan Inner Race", "12k Fan Outer Race",
+            "48k Drive Ball", "48k Drive Inner Race", "48k Drive Outer Race"
+        ])
+    else:
+        # 使用模型预测
+        out = OptimizedELM._sigmoid(feat_norm.reshape(1, -1) @ elm.W + elm.b) @ elm.beta
+        pred_class = np.argmax(out)
+        label_map = {
+            0: "Normal",
+            1: "12k Drive Ball",
+            2: "12k Drive Inner Race",
+            3: "12k Drive Outer Race",
+            4: "12k Fan Ball",
+            5: "12k Fan Inner Race",
+            6: "12k Fan Outer Race",
+            7: "48k Drive Ball",
+            8: "48k Drive Inner Race",
+            9: "48k Drive Outer Race"
+        }
+        result = label_map.get(pred_class, f"Unknown({pred_class})")
 
-    label_map = {
-        0: "Normal",
-        1: "12k Drive Ball",
-        2: "12k Drive Inner Race",
-        3: "12k Drive Outer Race",
-        4: "12k Fan Ball",
-        5: "12k Fan Inner Race",
-        6: "12k Fan Outer Race",
-        7: "48k Drive Ball",
-        8: "48k Drive Inner Race",
-        9: "48k Drive Outer Race"
-    }
-    result = label_map.get(pred_class, f"Unknown({pred_class})")
-
+    # 统一调试信息输出
+    debug_info = None
     if debug:
-        debug_info = f"""---- 调试信息 ----
+        if simulation_mode:
+            debug_info = f"[调试] 模拟信号类别: {result}"
+        else:
+            debug_info = f"""---- 调试信息 ----
 时间: {time.strftime('%H:%M:%S')}
 信号前10个样本: {sig[:10]}
-特征向量: {np.round(feat, 3)}
-标准化后特征: {np.round(feat_norm, 3)}
-ELM 输出: {np.round(out, 3)}
+特征向量: {np.round(feat,3)}
+标准化后特征: {np.round(feat_norm,3)}
+ELM 输出: {np.round(out,3) if not simulation_mode else '模拟'}
 预测类别: {result}
-预测置信度: {np.max(out):.3f}
+预测置信度: {np.max(out) if not simulation_mode else 1.0:.3f}
 -----------------"""
+
     return result, debug_info
 
 # =========================
@@ -173,9 +179,6 @@ def simulate_fault_signal(fault_type='Normal', fs=12000, duration=1.0, fr=50):
 # 读取 Paderborn 数据集
 # =========================
 def load_paderborn_signal(file_path, target_length=2048):
-    import numpy as np
-    import scipy.io
-
     mat = scipy.io.loadmat(file_path)
     signal_struct = mat['Signal'][0, 0]
 
