@@ -4,6 +4,9 @@
 # 依赖：os, sklearn, matplotlib, seaborn, numpy, data_loader, model
 
 import os
+import threading
+import time
+
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -17,8 +20,11 @@ from data_loader import load_data
 from model import OptimizedELM
 
 # 路径配置
-MODEL_PATH = r"../models/model.npy"  # 模型保存路径
-DATA_PATH = r"../CRWU"              # 数据集路径
+BASE = os.path.dirname(os.path.abspath(__file__))  # 自动获取当前文件所在目录
+NEW_DATA_PATH = os.path.join(BASE, "../uploaded_data/new_data.npy")
+MODEL_PATH = os.path.join(BASE, "../models/model.npy")
+VERSION_PATH = os.path.join(BASE, "../models/version.txt")
+DATA_PATH = os.path.join(BASE, "../CRWU")         # 数据集路径
 
 # 配置matplotlib中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Microsoft YaHei']
@@ -58,7 +64,7 @@ def train_model(data_path=DATA_PATH,
     # 类别加权
     # =========================
     classes = np.unique(y)  # 获取所有类别
-    # 计算类别权重（解决类别不平衡）
+    # 计算类别权重
     class_weights = compute_class_weight(class_weight='balanced', classes=classes, y=y)
     class_weight_dict = dict(zip(classes, class_weights))
     print("类别权重:", class_weight_dict)
@@ -140,5 +146,4 @@ def train_model(data_path=DATA_PATH,
     params = {'W': elm.W, 'b': elm.b, 'beta': elm.beta, 'mean': scaler.mean_, 'scale': scaler.scale_}
     np.save(save_path, params)
     print(f'模型保存完成: {save_path}')
-
     return elm, scaler
