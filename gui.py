@@ -8,13 +8,10 @@ import numpy as np
 import threading
 import time
 
-from fontTools.cffLib import width
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from tkinter import filedialog, messagebox
 import traceback
-
-from win32comext.ifilter import ifilter
 
 # 导入边缘端检测模块
 from edge.detector import predict_signal, collect_signals, check_model_update, current_version, \
@@ -99,6 +96,21 @@ debug_check.pack(pady=5)
 debug_status_label = ctk.CTkLabel(left_frame, text="调试模式: 关闭", font=("微软雅黑", 12))
 debug_status_label.pack(pady=2)
 
+# 界面是否已销毁标记
+ui_destroyed = False
+
+
+def on_closing():
+    """窗口关闭时的安全处理函数"""
+    global running, ui_destroyed
+    running = False
+    ui_destroyed = True
+    root.destroy()
+
+
+# 绑定窗口关闭事件
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
 
 # 更新调试状态和检测状态
 def update_debug_status():
@@ -106,6 +118,8 @@ def update_debug_status():
     定时更新调试模式状态和检测状态显示
     每500ms刷新一次
     """
+    if ui_destroyed:
+        return
     status_label.configure(text=f"检测状态: {'运行中' if running else '等待检测'}")
     debug_status_label.configure(text=f"调试模式: {'开启' if debug_var.get() else '关闭'}")
     root.after(500, update_debug_status)
@@ -154,6 +168,8 @@ def safe_insert_log(msg):
     """
 
     def insert():
+        if ui_destroyed:
+            return
         log_box.insert("end", msg)  # 插入日志到末尾
         log_box.see("end")  # 滚动到最新日志
         # 限制日志行数，超过1000行时删除最早的行
@@ -167,6 +183,8 @@ def safe_insert_log(msg):
 
 def clear_log():
     """清空日志文本框"""
+    if ui_destroyed:
+        return
     log_box.delete("1.0", "end")
 
 
@@ -209,6 +227,8 @@ def update_wave(sig):
     更新实时振动信号波形图
     :param sig: 振动信号数组
     """
+    if ui_destroyed:
+        return
     ax.clear()  # 清空原有绘图
     ax.plot(sig[:500])  # 绘制前500个样本点
     ax.set_title("实时振动信号")
@@ -222,6 +242,8 @@ def update_stat(status_list):
     更新故障统计柱状图
     :param status_list: 故障诊断结果列表
     """
+    if ui_destroyed:
+        return
     stat_ax.clear()  # 清空原有绘图
     # 统计各类故障数量
     counts = [status_list.count(label) for label in fault_labels]
@@ -257,10 +279,13 @@ def detect_loop_after():
     5. 记录日志
     """
     global running
-    if not running:
-        status_label.configure(text="检测状态: 等待检测")
+    if ui_destroyed or not running:
         return
-    status_label.configure(text="检测状态: 运行中")
+
+    try:
+        status_label.configure(text="检测状态: 运行中")
+    except:
+        return
 
     try:
         # 检查并热更新模型

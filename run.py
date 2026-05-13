@@ -12,7 +12,7 @@ import numpy as np
 
 from cloud.trainer import train_model
 from edge.detector import elm, check_model_update, reload_model, collect_signals, predict_signal, VERSION_PATH
-from gui import root, start_detection, stop_detection
+from gui import root, start_detection, stop_detection, ui_destroyed
 
 # =========================
 # 数据队列配置
@@ -29,7 +29,7 @@ def cloud_training_worker():
     云端训练工作线程
     从队列中获取新数据，训练模型并更新版本号
     """
-    while True:
+    while not ui_destroyed:
         # 阻塞等待队列数据
         new_data_dict = data_queue.get()
         print("[云端] 发现新数据，开始训练...")
