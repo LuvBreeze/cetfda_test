@@ -80,9 +80,9 @@ debug_status_label = ctk.CTkLabel(left_frame, text="调试模式: 关闭", font=
 debug_status_label.pack(pady=2)
 
 def update_debug_status():
+    status_label.configure(text=f"检测状态: {'运行中' if running else '等待检测'}")
     debug_status_label.configure(text=f"调试模式: {'开启' if debug_var.get() else '关闭'}")
     root.after(500, update_debug_status)
-update_debug_status()
 
 simulation_mode_var = ctk.StringVar(value='Random')
 simulation_mode_combobox = ctk.CTkComboBox(
@@ -161,8 +161,8 @@ def update_stat(status_list):
     stat_ax.bar(range(len(fault_labels_zh)), counts, color='orange')
     stat_ax.set_xticks(range(len(fault_labels_zh)))
     stat_ax.set_xticklabels(fault_labels_zh, rotation=45, ha='right', fontproperties='Microsoft YaHei')
-    stat_ax.set_title("故障统计")
     stat_ax.set_ylabel("数量")
+    stat_ax.set_title("故障统计")
     fig.tight_layout()
     canvas.draw()
 
@@ -176,8 +176,9 @@ signal_combobox.configure(values=signal_options, variable=signal_var)
 def detect_loop_after():
     global running
     if not running:
+        status_label.configure(text="检测状态: 等待检测")
         return
-
+    status_label.configure(text="检测状态: 运行中")
     try:
         # 热更新模型
         updated = check_model_update()
@@ -195,7 +196,7 @@ def detect_loop_after():
             simulation_flag = True
         elif "Paderborn" in mode:
             signals = collect_signals_from_paderborn(n_clients=3, n_signals=n_signals, debug=debug_var.get())
-            simulation_flag = True
+            simulation_flag = False
         else:
             safe_insert_log(f"[Error] 未知模拟模式: {mode}\n")
             signals = collect_signals(n_clients=3, n_signals=n_signals, debug=debug_var.get(), simulation_mode=False)
