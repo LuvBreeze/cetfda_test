@@ -93,7 +93,7 @@ def load_data(base_path):
     # =========================
     for folder_rel, label, sig_type in datasets:
         folder_path = os.path.join(base_path, folder_rel)
-        print('读取:', folder_path)
+        print('读取:', folder_rel)
         traverse(folder_path, label, sig_type)
 
     # =========================

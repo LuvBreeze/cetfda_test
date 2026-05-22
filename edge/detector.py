@@ -17,7 +17,7 @@ from cloud.trainer import train_model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, '../models/model.npy')
 VERSION_PATH = os.path.join(BASE_DIR, '../models/version.txt')
-DATA_PATH = os.path.join(BASE_DIR, '../CRWU')
+DATA_PATH = os.path.join(BASE_DIR, '../CWRU')
 
 # -------------------
 # 初始化模型

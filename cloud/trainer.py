@@ -24,7 +24,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))  # 自动获取当前文件所
 NEW_DATA_PATH = os.path.join(BASE, "../uploaded_data/new_data.npy")
 MODEL_PATH = os.path.join(BASE, "../models/model.npy")
 VERSION_PATH = os.path.join(BASE, "../models/version.txt")
-DATA_PATH = os.path.join(BASE, "../CRWU")         # 数据集路径
+DATA_PATH = os.path.join(BASE, "../CWRU")         # 数据集路径
 
 # 配置matplotlib中文显示
 matplotlib.rcParams['font.sans-serif'] = ['Microsoft YaHei']
@@ -96,23 +96,62 @@ def train_model(data_path=DATA_PATH,
     # =========================
     # 划分训练/测试集
     # =========================
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_bal, y_bal, test_size=0.2, random_state=42, stratify=y_bal
+    X_train_raw, X_test_raw, y_train_raw, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y
     )
 
     # =========================
-    # 训练ELM模型
+    # 类别加权：只根据训练集计算
+    # =========================
+    classes = np.unique(y_train_raw)
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=classes,
+        y=y_train_raw
+    )
+    class_weight_dict = dict(zip(classes, class_weights))
+    print("类别权重:", class_weight_dict)
+
+    # =========================
+    # 数据标准化：只用训练集 fit
+    # =========================
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train_raw)
+    X_test = scaler.transform(X_test_raw)
+
+    # =========================
+    # 少数类过采样：只对训练集做
+    # =========================
+    max_count = max([np.sum(y_train_raw == cls) for cls in classes])
+
+    X_aug, y_aug = [], []
+    for cls in classes:
+        idx = np.where(y_train_raw == cls)[0]
+        X_cls = X_train[idx]
+        y_cls = y_train_raw[idx]
+
+        n_repeat = int(np.ceil(max_count / len(idx)))
+        X_aug.append(np.tile(X_cls, (n_repeat, 1))[:max_count])
+        y_aug.append(np.tile(y_cls, n_repeat)[:max_count])
+
+    X_train_bal = np.vstack(X_aug)
+    y_train_bal = np.hstack(y_aug)
+
+    # =========================
+    # 训练 ELM 模型
     # =========================
     print(f"训练 ELM 模型，隐藏节点数={n_hidden} ...")
     elm = OptimizedELM(n_hidden=n_hidden)
 
-    # 生成样本权重
-    sample_weight = np.array([class_weight_dict[label] for label in y_train])
-    # 训练模型（带样本权重）
-    elm.fit(X_train, y_train, sample_weight=sample_weight)
+    sample_weight = np.array([class_weight_dict[label] for label in y_train_bal])
+    elm.fit(X_train_bal, y_train_bal, sample_weight=sample_weight)
 
     # =========================
-    # 模型评估
+    # 模型评估：测试集不参与过采样
     # =========================
     pred = elm.predict(X_test)
     acc = accuracy_score(y_test, pred)
@@ -145,5 +184,5 @@ def train_model(data_path=DATA_PATH,
     # =========================
     params = {'W': elm.W, 'b': elm.b, 'beta': elm.beta, 'mean': scaler.mean_, 'scale': scaler.scale_}
     np.save(save_path, params)
-    print(f'模型保存完成: {save_path}')
+    print(f'模型保存完成: {save_path[save_path.find("../"):]}')
     return elm, scaler
